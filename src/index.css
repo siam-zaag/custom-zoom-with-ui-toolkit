@@ -1,1 +1,13 @@
 @import "tailwindcss";
+
+.mat-mdc-fab.mat-primary {
+    background-color: #008a00 !important;
+}
+
+.mat-badge-content {
+    background-color: #008a00 !important;
+}
+
+#video-player-container {
+    background-color: none !important;
+}
