@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import uitoolkit from "@zoom/videosdk-ui-toolkit";
+import ZoomVideo from "@zoom/videosdk";
+
 import "@zoom/videosdk-ui-toolkit/dist/videosdk-ui-toolkit.css";
 
 function App() {
@@ -8,6 +10,8 @@ function App() {
   const [isHost, setIsHost] = useState(false);
   const [error, setError] = useState("");
   let sessionContainer = null;
+  let client = ZoomVideo.createClient();
+
   // const authEndpoint = "http://localhost:4000";
   const authEndpoint = "http://localhost:4000";
 
@@ -19,6 +23,10 @@ function App() {
   // meeting timer
   const [meetingStarted, setMeetingStarted] = useState(false);
   const [meetingTimeLeft, setMeetingTimeLeft] = useState(3600); // 1 hour in seconds
+
+  // Recording State
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordedFiles, setRecordedFiles] = useState([]);
 
   useEffect(() => {
     if (meetingStarted && meetingTimeLeft > 0) {
@@ -56,7 +64,14 @@ function App() {
       "chat",
       "share",
     ],
-    options: { init: {}, audio: {}, video: {}, share: {} },
+    options: {
+      init: {},
+      audio: {},
+      video: {},
+      share: {},
+      recording: {},
+      settings: {},
+    },
     virtualBackground: {
       allowVirtualBackground: true,
       allowVirtualBackgroundUpload: true,
@@ -65,6 +80,20 @@ function App() {
       ],
     },
   };
+
+  useEffect(() => {
+    const initializeMeet = async () => {
+      await client.init("en-US", "Global", {
+        patchJsMedia: true,
+        stayAwake: true,
+        leaveOnPageUnload: true,
+      });
+    };
+
+    if (isHost) {
+      initializeMeet();
+    }
+  }, [isHost]);
 
   function getVideoSDKJWT(e) {
     e.preventDefault();
@@ -82,6 +111,8 @@ function App() {
         body: JSON.stringify({
           sessionName: roomName,
           role: isHost ? 1 : 0,
+          cloudRecordingOption: 0, // 1 for multiple file, 0 for single file
+          cloudRecordingElection: isHost ? 1 : 0,
         }),
       })
         .then((response) => {
@@ -106,6 +137,12 @@ function App() {
       if (sessionContainer) {
         uitoolkit.joinSession(sessionContainer, config);
         sessionContainer && uitoolkit.onSessionClosed(sessionClosed);
+        client.join(
+          roomName,
+          config.videoSDKJWT,
+          username,
+          config.sessionPasscode
+        );
 
         // ✅ Start the timer when meeting begins
         setMeetingStarted(true);
@@ -145,7 +182,7 @@ function App() {
         console.log("Meeting Extended", data.signature);
 
         config.videoSDKJWT = data.signature;
-        uitoolkit.updateSession(config); // Update session with new JWT
+        // uitoolkit.updateSession(config); // Update session with new JWT
 
         // ✅ Add extra time to the countdown
         setMeetingTimeLeft((prev) => prev + extensionTime * 60);
@@ -181,6 +218,32 @@ function App() {
     const joinFlowElement = document.getElementById("join-flow");
     if (joinFlowElement) {
       joinFlowElement.style.display = "block";
+    }
+  };
+
+  // Recording Functions
+  const startRecording = async () => {
+    console.log("hi");
+
+    try {
+      const cloudRecording = client.getRecordingClient();
+      await cloudRecording.startCloudRecording();
+      setIsRecording(true);
+      console.log("✅ Recording Started...");
+    } catch (error) {
+      console.error("❌ Error starting recording:", error);
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!sessionContainer) return;
+    try {
+      const files = await uitoolkit.stopRecording(sessionContainer);
+      setIsRecording(false);
+      setRecordedFiles(files);
+      console.log("✅ Recording Stopped. Files saved:", files);
+    } catch (error) {
+      console.error("❌ Error stopping recording:", error);
     }
   };
 
@@ -263,6 +326,13 @@ function App() {
             <div className="bg-gray-700 text-white px-4 py-2 rounded-md mt-1 text-xs">
               Time Left: {formatTime(meetingTimeLeft)}
             </div>
+
+            <button
+              className="bg-red-500 text-white py-2 px-4 rounded-md text-xs"
+              onClick={isRecording ? stopRecording : startRecording}
+            >
+              {isRecording ? "Stop Recording" : "Start Recording"}
+            </button>
           </div>
         )}
 
