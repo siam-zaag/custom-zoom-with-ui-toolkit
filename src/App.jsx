@@ -13,7 +13,7 @@ function App() {
   let client = ZoomVideo.createClient();
 
   // const authEndpoint = "http://localhost:4000";
-  const authEndpoint = "http://localhost:4000";
+  const authEndpoint = "http://192.168.10.13:7010/api/1.0.0";
 
   // extend meetigns state
   const [meetingExtended, setMeetingExtended] = useState(false);
@@ -22,11 +22,16 @@ function App() {
 
   // meeting timer
   const [meetingStarted, setMeetingStarted] = useState(false);
-  const [meetingTimeLeft, setMeetingTimeLeft] = useState(3600); // 1 hour in seconds
+  const [meetingTimeLeft, setMeetingTimeLeft] = useState(60); // 1 hour in seconds
 
   // Recording State
   const [isRecording, setIsRecording] = useState(false);
   const [recordedFiles, setRecordedFiles] = useState([]);
+
+  const [temp, setTemp] = useState({
+    currentStartTime: 0,
+    currentExpirationTime: 0,
+  });
 
   useEffect(() => {
     if (meetingStarted && meetingTimeLeft > 0) {
@@ -105,14 +110,14 @@ function App() {
       if (joinFlowElement) {
         joinFlowElement.style.display = "none";
       }
-      fetch(authEndpoint, {
+      fetch(`${authEndpoint}/zoom/generate-token`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sessionName: roomName,
           role: isHost ? 1 : 0,
-          cloudRecordingOption: 0, // 1 for multiple file, 0 for single file
-          cloudRecordingElection: isHost ? 1 : 0,
+          // cloudRecordingOption: 1, // 1 for multiple file, 0 for single file
+          // cloudRecordingElection: 1,
         }),
       })
         .then((response) => {
@@ -120,7 +125,12 @@ function App() {
         })
         .then((data) => {
           if (data.signature) {
-            console.log(data.signature);
+            console.log(data);
+            setTemp({
+              currentExpirationTime: data.exp,
+              currentStartTime: data?.iat,
+            });
+
             config.videoSDKJWT = data.signature;
             joinSession();
           } else {
@@ -157,7 +167,7 @@ function App() {
 
       // ✅ Reset timer and state when meeting ends
       setMeetingStarted(false);
-      setMeetingTimeLeft(3600); // Reset to 1 hour
+      setMeetingTimeLeft(60); // Reset to 1 hour
 
       const joinFlowElement = document.getElementById("join-flow");
       if (joinFlowElement) {
@@ -168,12 +178,15 @@ function App() {
 
   const extendMeeting = async () => {
     try {
-      const response = await fetch(authEndpoint, {
+      const response = await fetch(`${authEndpoint}/zoom/extend-token`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sessionName: roomName,
           role: isHost ? 1 : 0,
+          extendMinute: extensionTime,
+          currentStartTime: temp.currentStartTime,
+          currentExpirationTime: temp.currentExpirationTime,
         }),
       });
 
@@ -195,7 +208,7 @@ function App() {
     } catch (error) {
       console.error("Error extending meeting:", error);
       // Temporarily add extra time
-      setMeetingTimeLeft((prev) => prev + extensionTime * 60);
+      // setMeetingTimeLeft((prev) => prev + extensionTime * 60);
       setShowModal(false);
     }
   };
@@ -212,7 +225,7 @@ function App() {
 
     // ✅ Reset timer and state when meeting ends
     setMeetingStarted(false);
-    setMeetingTimeLeft(3600); // Reset to 1 hour
+    setMeetingTimeLeft(60); // Reset to 1 hour
 
     // Show the join UI again
     const joinFlowElement = document.getElementById("join-flow");
